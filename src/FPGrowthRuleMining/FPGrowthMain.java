@@ -5,7 +5,7 @@
 package FPGrowthRuleMining;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
+//import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -131,7 +131,7 @@ public class FPGrowthMain {
 			if(line.toString().equals("")||line.toString().equals("\n")) {
 				return;
 			}
-			System.out.println("line: "+line.toString());
+			
 			List<Itemset> itemsets = ItemsetUtils.readFreqItemsets(line.toString());//works
 			List<AssociationRule> rules = new ArrayList<AssociationRule>();
 			for(Itemset i : itemsets) {
@@ -212,7 +212,7 @@ public class FPGrowthMain {
 		String inputDir = args[0];
 		String outputDir = args[1];
 		int support = Integer.parseInt(args[2]);
-		int orderedSetRead = Integer.parseInt(args[3]);//TEST
+		//int orderedSetRead = Integer.parseInt(args[3]);//TEST
 		Hashtable<String, Integer> freqPatternTable = new Hashtable<String, Integer>();
 		
 		Configuration freqItemsetsGeneration = new Configuration();
@@ -254,7 +254,7 @@ public class FPGrowthMain {
 		frequentPatternString = frequentPatternString.substring(0, frequentPatternString.length()-1);
 		
 		//Test works until here for sure, finds freq pattern successfully
-		System.out.println("frequent pattern: "+frequentPatternString);
+		//System.out.println("frequent pattern: "+frequentPatternString);
 		
 		//Run next job to find ordered itemsets and find cumulative frequencies
 		freqItemsetsGeneration.set("frequentPattern", frequentPatternString);
@@ -306,7 +306,6 @@ public class FPGrowthMain {
 				FPTreeNode child = current.addChild(item, count);
 				
 				//Add the node to node link table
-				//System.out.println("getting "+item);
 				int tableIndex = freqPatternTable.get(item);
 				
 				//Adding the first node
@@ -327,11 +326,6 @@ public class FPGrowthMain {
 		}
 		scOutput.close();
 		//---------------------------
-		//fp tree building end
-		//tree building - right
-		//node link table and links:  
-
-		
 
 		/*TEST
 		System.out.println("head node's children: ");
@@ -364,18 +358,21 @@ public class FPGrowthMain {
 			}
 		});
 		BufferedWriter br = new BufferedWriter( new OutputStreamWriter( outStream, "UTF-8" ) );
+		//List<Itemset> freqPatternList = new ArrayList<Itemset>(Arrays.asList(frequentPattern));
 		
 		for(int i=0; i<nodeLinkTable.length; i++) {
 			//list of all conditional pattern bases of each node in the node link table
 			List<Itemset> condPattBaseList = new ArrayList<Itemset>();
+			int itemCount = 0;
 			
 			if(nodeLinkTable[i] == null) {
 				continue;
 			}
 			
-			//For each next
+			//Construct conditional pattern bases
 			FPTreeNode nextClimber = nodeLinkTable[i];
 			do {
+				itemCount += nextClimber.getCount();
 				FPTreeNode parentClimber = nextClimber.getParent();
 				Itemset condPatternBase = new Itemset();
 				//For each parent
@@ -384,66 +381,111 @@ public class FPGrowthMain {
 					parentClimber = parentClimber.getParent();
 				}
 				condPatternBase.reverseSet();
+				//condPatternBase.addItem(nextClimber.getItem());
 				condPatternBase.setSupport(nextClimber.getCount());
-				condPattBaseList.add(condPatternBase);
+				if(condPatternBase.size() >= 1) {
+					condPattBaseList.add(condPatternBase);
+				}
+				
 				nextClimber = nextClimber.getNext();
 			}while(nextClimber != null);
-			
-			//dont do this, not technically how it works
-			/*Find common items -TESTPRINTS
-			System.out.println("for item: "+nodeLinkTable[i].getItem()+", these are the conditional pattern bases");
-			// print all conditional pattern bases
-			for(Itemset itemset : condPattBaseList) {
-				System.out.println(itemset.toString());
-			}//*/
-			
-			//Itemset commonPrefix = new Itemset();
 
 			//If the item had no conditional pattern bases
-			if(condPattBaseList.get(0).size() == 0) {
+			if(condPattBaseList.size() == 0) {
 				continue;
 			}
 			
-			//Find the conditional 'FP tree' of the item 
-			FPTreeNode condFPTree = new FPTreeNode();
-			FPTreeNode countCheck = new FPTreeNode();
-			current = countCheck;
+			//Find the conditional FP tree of the item 
+			/*
+			int count = 0;
+			FPTreeNode frequentItemNodes = new FPTreeNode(); //Used to find freq-2-sets with these children and nodelinktable[i]
+			FPTreeNode condFPTree = new FPTreeNode(); //Actual conditional FP tree of nodelinktable[i]
+			current = condFPTree;
 			
 			for(Itemset itemset : condPattBaseList) {
-				current = countCheck;
+				count += itemset.getSupport();
+				current = condFPTree;
 				for(String item : itemset.getItemset()) {
+					//Only increment count if the added node is from a diferent sub tree
+					FPTreeNode child;
 					boolean childExisted = current.hasChild(item) != (-1);
-					//HERE, cant add child, increments with count. only increment if its a different subtree
 					if(!childExisted) {
-						condFPTree.addChild(item, itemset.getSupport());
+						frequentItemNodes.addChild(item, itemset.getSupport());
+						child = current.addChild(item, itemset.getSupport());
 					}
-					FPTreeNode child = current.addChild(item, 0);
+					else {
+						child = current.addChild(item, 0);
+					}
 					current = child;
 				}
 			}
 			
 			//Remove infrequent items
 			List<FPTreeNode> frequentNodes = new ArrayList<FPTreeNode>();
-			for(FPTreeNode n : condFPTree.getChildrenNodes()) {
+			for(FPTreeNode n : frequentItemNodes.getChildrenNodes()) {
 				if(n.getCount() >= support) {
 					frequentNodes.add(n);
 				}
 			}
 			
-//			System.out.println("finding freq itemsets for "+nodeLinkTable[i].getItem());
 			List<Itemset> frequentItemsets = new ArrayList<Itemset>();
 			Itemset itemset = new Itemset();
 			itemset.addItem(nodeLinkTable[i].getItem());
-			ItemsetUtils.mineFreqItemset(frequentItemsets, frequentNodes, itemset.toString(), 0);
-//			System.out.println("writing itemsets...");
+			ItemsetUtils.mineFreqItemset(frequentItemsets, frequentNodes, itemset.toString(), 0, count);
+			//*/
+			
+			//Mine frequent itemsets by constructing the conditional FP tree of each nodeLinkTable[i]
+			/*Test print
+			//cond patt base
+			System.out.println("cond patt base for "+nodeLinkTable[i].getItem());
+			for(Itemset itemset : condPattBaseList) {
+				System.out.println(itemset.toString()+": "+itemset.getSupport());
+			}//*/
+
+			//F-list
+//			System.out.println("F-list for "+nodeLinkTable[i].getItem());
+			List<Itemset> fList = ItemsetUtils.findFList(condPattBaseList, support);
+			Itemset[] freqList = new Itemset[fList.size()];
+			fList.toArray(freqList);
+			Arrays.sort(freqList);
+			/*testprint
+			for(Itemset itemset : freqList) {
+				System.out.println(itemset.toString()+": "+itemset.getSupport());
+			}//*/
+			
+			List<Itemset> frequentItemsets = new ArrayList<Itemset>();
+			//Use f-list to find frequ-2-sets
+			for(Itemset itemset : freqList) {
+				Itemset freqItemset = new Itemset();
+				String condFreqItem = itemset.getLastItem();
+				freqItemset.addItem(condFreqItem);
+				freqItemset.addItem(nodeLinkTable[i].getItem());
+				freqItemset.setSupport(Math.min(itemCount, itemset.getSupport()));
+				frequentItemsets.add(freqItemset);
+				ItemsetUtils.constructFreqItemsets(frequentItemsets, frequentPattern, condPattBaseList, freqItemset, support);
+			}
+			
+			/*TEST PRINTS
+			System.out.println("FREQ ITEMSETS");
 			for(Itemset freq : frequentItemsets) {
-//				outStream.writeChars(freq.toString()+":"+freq.getSupport()+";");
+				System.out.println(freq.toString()+":"+freq.getSupport());
+			}
+			
+			FPTree condFPTree = new FPTree(nodeLinkTable.length, freqPatternTable, support);
+			condFPTree.constructTree(condPattBaseList);
+			//condfptree test print
+			System.out.println("cond fp tree for "+nodeLinkTable[i].getItem());
+			FPTreeNode.testPrintTree(condFPTree.getRoot(), 0);
+			//*/
+			
+			
+			//
+			for(Itemset freq : frequentItemsets) {
 				br.write(freq.toString()+":"+freq.getSupport()+";");
 			}
 			if(nodeLinkTable[i]!=null && frequentItemsets.size()!=0) {
-//				outStream.writeChars("\n");
 				br.write("\n");
-			}
+			}//*/
 		}
 		outStream.close();
 		
@@ -461,7 +503,7 @@ public class FPGrowthMain {
 		if(!rulesComplete) {
 			System.out.println("An error occured while generating rules.");
 			System.exit(1);
-		}
+		}//*/
 		
 		System.exit(0);
 	}

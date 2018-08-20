@@ -195,24 +195,24 @@ public class ItemsetUtils {
 	
 	/**
 	 * Adds frequent itemsets to the list given, recursively. works
-	 * @param freqItemsetList
+	 * @param freqItemsetList - List of frequent itemsets generated. Alg will add to this list. Pass in an empty list.
 	 * @param condFPTree
 	 * @param freqItemset
 	 * @param minSupport
 	 * @param 
 	 */
-	public static void mineFreqItemset(List<Itemset> freqItemsetList, List<FPTreeNode> condFPTree, String freqItemsetString, int index){
-		//finish
+	public static void mineFreqItemset(List<Itemset> freqItemsetList, List<FPTreeNode> condFPTree, String freqItemsetString, int index, int count){
 		if(condFPTree.size() == index) {
 			return;
 		}
 		
 		for(int i=index; i<condFPTree.size(); i++) {
 			Itemset freqItemset = readItemset(freqItemsetString);
+			int minCount = Math.min(count, condFPTree.get(i).getCount());
 			freqItemset.addItem(condFPTree.get(i).getItem());
-			freqItemset.setSupport(condFPTree.get(i).getCount());
+			freqItemset.setSupport(minCount);
 			freqItemsetList.add(freqItemset);
-			mineFreqItemset(freqItemsetList, condFPTree, freqItemset.toString(), (index+(i+1)) );
+			mineFreqItemset(freqItemsetList, condFPTree, freqItemset.toString(), (index+(i+1)), count);
 			
 		}
 	}
@@ -221,7 +221,6 @@ public class ItemsetUtils {
 		List<Itemset> itemsets = new ArrayList<Itemset>();
 		String[] itemsetsLine = line.split(";");
 		for(String s : itemsetsLine) {
-			System.out.println(s);
 			if(!s.equals("")) {
 				String[] keyVal = s.split(":");
 				Itemset i = readItemset(keyVal[0]);
@@ -261,5 +260,105 @@ public class ItemsetUtils {
 		
 		rules.add(new AssociationRule(first, second, itemset.getSupport()));
 		rules.add(new AssociationRule(second, first, itemset.getSupport()));
+	}
+	
+	/**
+	 * Also prunes infrequent items
+	 * @param condPattBase
+	 * @param support
+	 * @return List of items that are frequent. In the form of a list of itemsets where each itemset only contains 1 item.
+	 */
+	public static List<Itemset> findFList(List<Itemset> condPattBase, int support){
+		FPTreeNode fList = new FPTreeNode();
+		for(Itemset itemset : condPattBase) {
+			for(String item : itemset.getItemset()) {
+				fList.addChild(item, itemset.getSupport());
+			}
+		}
+		List<Itemset> freqList = new ArrayList<Itemset>();
+		for(FPTreeNode n : fList.getChildrenNodes()) {
+			if(n.getCount() >= support) {
+				Itemset i = new Itemset();
+				i.addItem(n.getItem());
+				i.setSupport(n.getCount());
+				freqList.add(i);
+			}
+		}
+		return freqList;
+	}
+	
+	/*
+	public static boolean isSinglePath(FPTreeNode node) {
+		FPTreeNode current = node;
+		while(current.hasChildren()) {
+			if(current.getChildrenNodes().size() > 1) {
+				return false;
+			}
+			else {
+				current = current.getChildrenNodes().get(0);
+			}
+		}
+		return true;
+	}//*/
+	
+	/**
+	 * Constructs the cond pattern base for items up to a certain point in the freq pattern
+	 * feed in cond patt base and until where it should stop in the freq pattern
+	 */
+	public static List<Itemset> constructCondPattBase(List<Itemset> origCondPattBase, Itemset[] frequentPattern, String endItem) {
+		List<Itemset> condPattBase = new ArrayList<Itemset>();
+		
+		for(Itemset i : origCondPattBase) {
+			if(!i.contains(endItem)) {
+				continue;
+			}
+			Itemset condItemset = new Itemset();
+			
+			for(Itemset patt : frequentPattern) {
+				String item = patt.getFirstItem();
+				if(item.equals(endItem)) {
+					break;
+				}
+				else if(i.contains(item)) {
+					condItemset.addItem(item);
+				}
+			}
+			
+			if(condItemset.size()!=0) {
+				condItemset.setSupport(i.getSupport());
+				condPattBase.add(condItemset);
+			}
+			
+		}
+		return condPattBase;
+	}
+	
+	/**
+	 * Constructs frequent itemsets using the conditional FP trees of further itemsets
+	 * @param frequentItemsets
+	 * @param freqPatternList
+	 * @param origCondPattBase
+	 * @param base
+	 * @param minSupport
+	 */
+	public static void constructFreqItemsets(List<Itemset> frequentItemsets, Itemset[] freqPatternList, List<Itemset> origCondPattBase, Itemset base, int minSupport) {
+		List<Itemset> condPattBase = constructCondPattBase(origCondPattBase, freqPatternList, base.getFirstItem());
+		/*TEST
+		System.out.println("cond patt base for end item "+base.getFirstItem());
+		for(Itemset i : condPattBase) {
+			System.out.println(i.toString()+": "+i.getSupport());
+		}//*/
+		if(condPattBase.isEmpty()) {
+			return;
+		}
+		List<Itemset> fList = ItemsetUtils.findFList(condPattBase, minSupport);
+		for(Itemset i : fList) {
+			Itemset freqItemset = new Itemset(base);
+			String condItem = i.getLastItem();
+			freqItemset.addItemToFront(condItem);
+			freqItemset.setSupport(Math.min(base.getSupport(), i.getSupport()));
+			frequentItemsets.add(freqItemset);
+			constructFreqItemsets(frequentItemsets, freqPatternList, condPattBase, freqItemset, minSupport);
+		}
 	}
 }

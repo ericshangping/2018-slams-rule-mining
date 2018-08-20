@@ -94,6 +94,12 @@ public class FPTreeNode {
 		}
 	}
 	
+	public void removeChild(String item) {
+		int index = hasChild(item);
+		this.children.get(index).setParent(null);
+		this.children.remove(index);
+	}
+	
 	/*
 	public FPTreeNode addCondChild(String item, int count) {
 		int childIndex = this.hasChild(item);
@@ -132,6 +138,10 @@ public class FPTreeNode {
 			}
 		}
 		return -1;
+	}
+	
+	public boolean hasChildren() {
+		return this.children.size() != 0;
 	}
 	
 	/**

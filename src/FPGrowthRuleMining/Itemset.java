@@ -47,6 +47,10 @@ public class Itemset implements Comparable<Itemset>{
 		itemset.add(i);
 	}
 	
+	public void addItemToFront(String i) {
+		this.itemset.add(0, i);
+	}
+	
 	/**
 	 * Adds all elements of the given itemset to this itemset.
 	 * @param itemset
@@ -123,6 +127,10 @@ public class Itemset implements Comparable<Itemset>{
 			}
 		}
 		return false;
+	}
+	
+	public String getFirstItem() {
+		return this.itemset.get(0);
 	}
 	
 	public String getLastItem() {

@@ -245,18 +245,20 @@ public class ItemsetUtils {
 		int size = itemset.size();
 		
 		Itemset first = new Itemset();
-		for(int i=0; i<(size-1); i++) {
-			first.addItem(itemset.getItemset().get(i));
-		}
+		first.addItem(itemset.getFirstItem());
+		
 		Itemset second = new Itemset();
-		second.addItem(itemset.getLastItem());
-		if(first.size()==1) {
-			first = findItemset(freq1sets, first);
+		for(int i=1; i<size; i++) {
+			second.addItem(itemset.getItemset().get(i));
+		}
+		
+		first = findItemset(freq1sets, first);
+		if(second.size()==1) {
+			second = findItemset(freq1sets, second);
 		}
 		else {
-			first = findItemset(freqItemsets, first);
+			second = findItemset(freqItemsets, second);
 		}
-		second = findItemset(freq1sets, second);
 		
 		rules.add(new AssociationRule(first, second, itemset.getSupport()));
 		rules.add(new AssociationRule(second, first, itemset.getSupport()));

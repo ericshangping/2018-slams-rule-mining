@@ -182,12 +182,11 @@ public class FPGrowthMain {
 	public static class RulesReducer
 	extends Reducer<Text,DoubleWritable,Text,DoubleWritable>
 	{
-//		private Text assocRule = new Text();
-//		private DoubleWritable confidence = new DoubleWritable();
 		private double minConfidence;
 		
-		protected void setup() {
-			minConfidence = 0.5;
+		protected void setup(Context context) {
+			String confString = context.getConfiguration().get("confidence", "0");
+			minConfidence = Double.parseDouble(confString);
 		}
 		
 		public void reduce(Text rule, Iterable<DoubleWritable> values, Context context) 
@@ -199,7 +198,6 @@ public class FPGrowthMain {
 					context.write(rule, c);
 				}
 			}
-			
 		}
 	}
 	
@@ -208,12 +206,15 @@ public class FPGrowthMain {
 		String inputDir = args[0];
 		String outputDir = args[1];
 		int support = Integer.parseInt(args[2]);
-		//int orderedSetRead = Integer.parseInt(args[3]);//TEST
+		String confidence = args[3];
+		
 		Hashtable<String, Integer> freqPatternTable = new Hashtable<String, Integer>();
+		
 		long start = System.currentTimeMillis();
 		
 		Configuration freqItemsetsGeneration = new Configuration();
 		freqItemsetsGeneration.setInt("support", support);
+		freqItemsetsGeneration.set("confidence", confidence);
 		freqItemsetsGeneration.set("outputDir", outputDir);
 		FileSystem fs = FileSystem.get(freqItemsetsGeneration);
 		

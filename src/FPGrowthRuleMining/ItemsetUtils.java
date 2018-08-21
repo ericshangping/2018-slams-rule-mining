@@ -1,4 +1,5 @@
 package FPGrowthRuleMining;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -38,16 +39,20 @@ public class ItemsetUtils {
 	 * @param conf
 	 * @param outputDir
 	 * @return
+	 * @throws IOException 
 	 */
-	public static List<Itemset> getItem1Sets(Configuration conf, String outputDir) {
+	public static List<Itemset> getItem1Sets(Configuration conf, String outputDir) throws IOException {
 		List<Itemset> itemsets = new ArrayList<Itemset>();
+		FileSystem fs = FileSystem.get(conf);
+		String base = outputDir + "/part-r-";
+		int part = 0;
 		
-		String file = outputDir + "/part-r-00000";
-		
-		//Read file
-		try {
-			Path path =  new Path(file);
-			FileSystem fs = FileSystem.get(conf);
+		String partString = ""+part;
+		String file = base + (("00000"+(partString)).substring(partString.length()));
+		Path path =  new Path(file);
+		//Read all files
+		do {
+			//Read itemsets
 			Scanner scOutput = new Scanner(fs.open(path));
 			while(scOutput.hasNextLine()) {
 				String[] keyValue = scOutput.nextLine().split("\t");
@@ -56,11 +61,14 @@ public class ItemsetUtils {
 				itemsets.add(freq1Itemset);
 			}
 			scOutput.close();
-		}
-		catch(Exception e) {
-			e.printStackTrace();
-		}
-		
+			
+			//Next file
+			part++;
+			partString = ""+part;
+			file = base + (("00000"+(partString)).substring(partString.length()));
+			path =  new Path(file);
+		}while(fs.exists(path));
+
 		return itemsets;
 	}
 	

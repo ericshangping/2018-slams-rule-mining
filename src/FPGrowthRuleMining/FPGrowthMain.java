@@ -5,7 +5,7 @@
 package FPGrowthRuleMining;
 
 import org.apache.hadoop.conf.Configuration;
-//import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -16,12 +16,9 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.util.Progressable;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
@@ -116,7 +113,7 @@ public class FPGrowthMain {
 		private DoubleWritable confidence = new DoubleWritable();
 		private List<Itemset> freqItemsets = new ArrayList<Itemset>();
 		
-		public void setup(Context context) {
+		public void setup(Context context) throws IOException {
 			String hdfsOutputDir = context.getConfiguration().get("fs.defaultFS") + 
 					context.getConfiguration().get("outputDir");
 			List<Itemset> freq1Itemsets = ItemsetUtils.getItem1Sets(context.getConfiguration(), hdfsOutputDir);
@@ -140,7 +137,6 @@ public class FPGrowthMain {
 			
 			//write
 			for(AssociationRule r : rules) {
-				//System.out.println(r.toString());
 				assocRule.set(r.toString());
 				confidence.set(r.getConfidence());
 				context.write(assocRule, confidence);
@@ -191,7 +187,7 @@ public class FPGrowthMain {
 		private double minConfidence;
 		
 		protected void setup() {
-			minConfidence = 0.5d;
+			minConfidence = 0.5;
 		}
 		
 		public void reduce(Text rule, Iterable<DoubleWritable> values, Context context) 
@@ -214,10 +210,12 @@ public class FPGrowthMain {
 		int support = Integer.parseInt(args[2]);
 		//int orderedSetRead = Integer.parseInt(args[3]);//TEST
 		Hashtable<String, Integer> freqPatternTable = new Hashtable<String, Integer>();
+		long start = System.currentTimeMillis();
 		
 		Configuration freqItemsetsGeneration = new Configuration();
 		freqItemsetsGeneration.setInt("support", support);
 		freqItemsetsGeneration.set("outputDir", outputDir);
+		FileSystem fs = FileSystem.get(freqItemsetsGeneration);
 		
 		//Find the frequent-1-itemsets
 		Job freq1Sets = Job.getInstance(freqItemsetsGeneration, "FPGrowth_Frequent-1-Itemsets");
@@ -254,7 +252,7 @@ public class FPGrowthMain {
 		frequentPatternString = frequentPatternString.substring(0, frequentPatternString.length()-1);
 		
 		//Test works until here for sure, finds freq pattern successfully
-		//System.out.println("frequent pattern: "+frequentPatternString);
+		System.out.println("frequent pattern: "+frequentPatternString);
 		
 		//Run next job to find ordered itemsets and find cumulative frequencies
 		freqItemsetsGeneration.set("frequentPattern", frequentPatternString);
@@ -282,49 +280,57 @@ public class FPGrowthMain {
 		FPTreeNode[] nodeLinkTable = new FPTreeNode[frequentPattern.length];
 		
 		//Read from the outputs
-		String orderedOutputFile = freqItemsetsGeneration.get("fs.defaultFS") + 
-				outputDir + "OrderedItemsets" + "/part-r-00000";
+		String orderedOutputFileBase = hdfsOutputDir + "OrderedItemsets" + "/part-r-";
+		int part = 0;
+		String partString = ""+part;
+		String orderedOutputFile = orderedOutputFileBase + (("00000"+partString).substring(partString.length()));
 		Path path = new Path(orderedOutputFile);
-		FileSystem fs = FileSystem.get(freqItemsetsGeneration);
-		Scanner scOutput = new Scanner(fs.open(path));
 		
-		while(scOutput.hasNextLine()) {
-//		for(int k=0; k<orderedSetRead; k++) { // testtesttesttesttesttest
-			
-			String[] keyValue = scOutput.nextLine().split("\t");
-			if(keyValue[0].equals("[]")) {
-				continue;
-			}
-			Itemset orderedItemset = ItemsetUtils.readItemset(keyValue[0]);
-			int count = Integer.parseInt(keyValue[1]);
-			
-			//For all the items in the ordered itemset of the ordered transaction
-			current = fpTreeRoot;
-			for(String item : orderedItemset.getItemset()) {
-				//Add to the cumulative counts of the associations
-				boolean childExisted = current.hasChild(item) != (-1);
-				FPTreeNode child = current.addChild(item, count);
-				
-				//Add the node to node link table
-				int tableIndex = freqPatternTable.get(item);
-				
-				//Adding the first node
-				if(nodeLinkTable[tableIndex] == null) {
-					nodeLinkTable[tableIndex] = child;
+		do {
+			//Read in ordered itemsets and construct the FP tree
+			Scanner scOutput = new Scanner(fs.open(path));
+			while(scOutput.hasNextLine()) {
+				String[] keyValue = scOutput.nextLine().split("\t");
+				if(keyValue[0].equals("[]")) {
+					continue;
 				}
-				//Appending it to the end of the next-chain, only if it is a new node
-				else if(!childExisted) {
-					FPTreeNode next = nodeLinkTable[tableIndex];
-					while(next.hasNext()) {
-						next = next.getNext();
+				Itemset orderedItemset = ItemsetUtils.readItemset(keyValue[0]);
+				int count = Integer.parseInt(keyValue[1]);
+				
+				//For all the items in the ordered itemset of the ordered transaction
+				current = fpTreeRoot;
+				for(String item : orderedItemset.getItemset()) {
+					//Add to the cumulative counts of the associations
+					boolean childExisted = current.hasChild(item) != (-1);
+					FPTreeNode child = current.addChild(item, count);
+					
+					//Add the node to node link table
+					int tableIndex = freqPatternTable.get(item);
+					
+					//Adding the first node
+					if(nodeLinkTable[tableIndex] == null) {
+						nodeLinkTable[tableIndex] = child;
 					}
-					next.setNext(child);
+					//Appending it to the end of the next-chain, only if it is a new node
+					else if(!childExisted) {
+						FPTreeNode next = nodeLinkTable[tableIndex];
+						while(next.hasNext()) {
+							next = next.getNext();
+						}
+						next.setNext(child);
+					}
+					//End - adding to node link table
+					current = child;
 				}
-				//End - adding to node link table
-				current = child;
 			}
-		}
-		scOutput.close();
+			scOutput.close();
+			
+			//Next file
+			part++;
+			partString = ""+part;
+			orderedOutputFile = orderedOutputFileBase + (("00000"+partString).substring(partString.length()));
+			path = new Path(orderedOutputFile);
+		}while(fs.exists(path));
 		//---------------------------
 
 		/*TEST
@@ -338,30 +344,28 @@ public class FPGrowthMain {
 		ItemsetUtils.printNodeLinkTable(nodeLinkTable);
 		System.out.println(">>>>TEST - end");
 		//*/
-		//Everything until here works
 		
 
-		//Construct conditional pattern base for each node in the node link table
-		
-		//condFPTreeList = new Itemset[frequentPattern.length];
 		//For writing to an input file for another map-reduce job
-		String freqItemsetGenInput = outputDir + 
-				"FreqItemsets" + 
-				"/freqItemsets.data";
+		String freqItemsetGenInput = hdfsOutputDir + "FreqItemsets/freqItemsets.data";
 		Path outFile = new Path(freqItemsetGenInput);
 		if(fs.exists(outFile)) {
 			System.out.println("The output file for frequent itemsets already exists.");
 			System.out.println("Location: "+freqItemsetGenInput);
 		}
+		
+		FSDataOutputStream outStream = fs.create(outFile);
+		/*
 		OutputStream outStream = fs.create(outFile, new Progressable() {
 			public void progress() {
 			}
 		});
 		BufferedWriter br = new BufferedWriter( new OutputStreamWriter( outStream, "UTF-8" ) );
-		//List<Itemset> freqPatternList = new ArrayList<Itemset>(Arrays.asList(frequentPattern));
+		//*/
 		
+		//Construct frequent itemsets for each node in the node link table
 		for(int i=0; i<nodeLinkTable.length; i++) {
-			//list of all conditional pattern bases of each node in the node link table
+			//List of the original conditional pattern bases of each node in the node link table
 			List<Itemset> condPattBaseList = new ArrayList<Itemset>();
 			int itemCount = 0;
 			
@@ -465,26 +469,14 @@ public class FPGrowthMain {
 				ItemsetUtils.constructFreqItemsets(frequentItemsets, frequentPattern, condPattBaseList, freqItemset, support);
 			}
 			
-			/*TEST PRINTS
-			System.out.println("FREQ ITEMSETS");
-			for(Itemset freq : frequentItemsets) {
-				System.out.println(freq.toString()+":"+freq.getSupport());
-			}
-			
-			FPTree condFPTree = new FPTree(nodeLinkTable.length, freqPatternTable, support);
-			condFPTree.constructTree(condPattBaseList);
-			//condfptree test print
-			System.out.println("cond fp tree for "+nodeLinkTable[i].getItem());
-			FPTreeNode.testPrintTree(condFPTree.getRoot(), 0);
-			//*/
-			
-			
 			//
 			for(Itemset freq : frequentItemsets) {
-				br.write(freq.toString()+":"+freq.getSupport()+";");
+//				br.write(freq.toString()+":"+freq.getSupport()+";");
+				outStream.writeBytes(freq.toString()+":"+freq.getSupport()+";");
 			}
 			if(nodeLinkTable[i]!=null && frequentItemsets.size()!=0) {
-				br.write("\n");
+//				br.write("\n");
+				outStream.writeBytes("\n");
 			}//*/
 		}
 		outStream.close();
@@ -504,6 +496,9 @@ public class FPGrowthMain {
 			System.out.println("An error occured while generating rules.");
 			System.exit(1);
 		}//*/
+		long end = System.currentTimeMillis();
+		long time = (end-start)/1000;
+		System.out.println("Rules generated. Time: "+time+"s");
 		
 		System.exit(0);
 	}

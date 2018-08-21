@@ -1,16 +1,16 @@
-//Frequent itemset generation using FPGrowth algorithm
+//Frequent itemset and association rules generation using FPGrowth algorithm
 //DXXSHA001
 //06 Aug 2018
 
 package FPGrowthRuleMining;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -19,17 +19,17 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
 
+import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
-import java.util.List;
 import java.util.Scanner;
 
 public class FPGrowthMain {
 	
-	/*
+	/**
 	 * Mapper to find candidate-1-itemsets for the IBM dataset
-	 * Processes each line at a time
+	 * Processes each line at a time.
 	 */
 	public static class Items1Mapper
 	extends Mapper<Object,Text,Text,IntWritable>
@@ -60,9 +60,8 @@ public class FPGrowthMain {
 	}
 	
 	/**
-	 * Mapper that finds the ordered itemset of each transaction
-	 * @author kizu
-	 *
+	 * Mapper that maps each transaction to an ordered itemset.
+	 * Order defined by the frequent pattern.
 	 */
 	public static class OrderedItemsetMapper
 	extends Mapper<Object,Text,Text,IntWritable>
@@ -72,7 +71,7 @@ public class FPGrowthMain {
 		private final IntWritable one = new IntWritable(1);
 		private String[] frequentPattern;
 		
-		//Setup - set frequent pattern up 
+		//Set frequent pattern
 		public void setup(Context context) {
 			frequentPattern = context.getConfiguration().get("frequentPattern").split(",");
 		}
@@ -99,13 +98,15 @@ public class FPGrowthMain {
 					orderedItemset.addItem(item);
 				}
 			}
-			//orderedItemsetString = orderedItemsetString.substring(0, orderedItemsetString.length()-2);
 			
 			orderedItemsetText.set(orderedItemset.toString());
 			context.write(orderedItemsetText, one);
 		}
 	}
 	
+	/**
+	 * Mapper that maps a line of frequent itemsets with combinations of rules.
+	 */
 	public static class RulesMapper
 	extends Mapper<Object,Text,Text,DoubleWritable>
 	{
@@ -113,6 +114,7 @@ public class FPGrowthMain {
 		private DoubleWritable confidence = new DoubleWritable();
 		private List<Itemset> freqItemsets = new ArrayList<Itemset>();
 		
+		//Set up frequent items to look up counts
 		public void setup(Context context) throws IOException {
 			String hdfsOutputDir = context.getConfiguration().get("fs.defaultFS") + 
 					context.getConfiguration().get("outputDir");
@@ -125,17 +127,16 @@ public class FPGrowthMain {
 		public void map(Object key, Text line, Context context) 
 		throws IOException, InterruptedException
 		{
-			if(line.toString().equals("")||line.toString().equals("\n")) {
+			/*if(line.toString().equals("")||line.toString().equals("\n")) {
 				return;
-			}
+			}*/
 			
-			List<Itemset> itemsets = ItemsetUtils.readFreqItemsets(line.toString());//works
+			List<Itemset> itemsets = ItemsetUtils.readFreqItemsets(line.toString());
 			List<AssociationRule> rules = new ArrayList<AssociationRule>();
 			for(Itemset i : itemsets) {
 				ItemsetUtils.genAssocRules(rules, itemsets, freqItemsets, i);
 			}
 			
-			//write
 			for(AssociationRule r : rules) {
 				assocRule.set(r.toString());
 				confidence.set(r.getConfidence());
@@ -144,10 +145,8 @@ public class FPGrowthMain {
 		}
 	}
 	
-	/*
-	 * Reducer to aggregate Text and accumulate count
-	 * KeyIn - String representation of an itemset enclosed with "[]" seperated by ", "
-	 *         e.g "[a, b, c, f, z]"
+	/**
+	 * Reducer to aggregate Text keys and accumulate count
 	 */
 	public static class ItemsReducer
 	extends Reducer<Text,IntWritable,Text,IntWritable>
@@ -179,6 +178,9 @@ public class FPGrowthMain {
 		}
 	}
 	
+	/**
+	 * Reducer for rules that check rules with the minimum confidence specified
+	 */
 	public static class RulesReducer
 	extends Reducer<Text,DoubleWritable,Text,DoubleWritable>
 	{

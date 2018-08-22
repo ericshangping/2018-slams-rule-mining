@@ -1,39 +1,27 @@
-package FPGrowthRuleMining;
 //A set of topics and it's count
 //DXXSHA001
 //16 Jul 2018
 
+package FPGrowthRuleMining;
+
 import java.util.List;
 import java.util.ArrayList;
-//import java.util.Set;
-//import java.util.TreeSet;
-
-import org.apache.hadoop.io.Text;
 
 import com.google.common.collect.Lists;
 
 public class Itemset implements Comparable<Itemset>{
 	//Variables
-	private Text ID;
 	private List<String> itemset;
 	private int supportCount;
 	
 	//Constructors
 	public Itemset() {
-		ID = new Text();
-		itemset = new ArrayList<String>();
-		this.supportCount = -1;
-	}
-	
-	public Itemset(String ID) {
-		this.ID = new Text(ID);
 		itemset = new ArrayList<String>();
 		this.supportCount = -1;
 	}
 	
 	//Copy constructor
 	public Itemset(Itemset i) {
-		this.ID = new Text(i.ID);
 		this.itemset = new ArrayList<String>(i.itemset);
 		this.supportCount = i.supportCount;
 	}
@@ -41,19 +29,23 @@ public class Itemset implements Comparable<Itemset>{
 	//Methods
 	/**
 	 * Adds a string to the set.
-	 * @param i
+	 * @param i Item to add to the itemset.
 	 */
 	public void addItem(String i) {
 		itemset.add(i);
 	}
 	
+	/**
+	 * Adds item to the back of the set.
+	 * @param i Item to add
+	 */
 	public void addItemToFront(String i) {
 		this.itemset.add(0, i);
 	}
 	
 	/**
 	 * Adds all elements of the given itemset to this itemset.
-	 * @param itemset
+	 * @param itemset Itemset to add to this.
 	 */
 	public void addSet(Itemset itemset) {
 		for(String i : itemset.itemset) {

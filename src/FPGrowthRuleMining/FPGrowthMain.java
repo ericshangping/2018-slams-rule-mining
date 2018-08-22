@@ -1,5 +1,5 @@
-//Frequent itemset and association rules generation using FPGrowth algorithm
-//DXXSHA001
+//Frequent itemset and association rules generation using FPGrowth algorithm on hadoop
+//Eric Shang-Ping Dai, DXXSHA001
 //06 Aug 2018
 
 package FPGrowthRuleMining;
@@ -118,7 +118,7 @@ public class FPGrowthMain {
 		public void setup(Context context) throws IOException {
 			String hdfsOutputDir = context.getConfiguration().get("fs.defaultFS") + 
 					context.getConfiguration().get("outputDir");
-			List<Itemset> freq1Itemsets = ItemsetUtils.getItem1Sets(context.getConfiguration(), hdfsOutputDir);
+			List<Itemset> freq1Itemsets = ItemsetUtils.getFreqItems(context.getConfiguration(), hdfsOutputDir);
 			for(Itemset i : freq1Itemsets) {
 				freqItemsets.add(i);
 			}
@@ -238,7 +238,7 @@ public class FPGrowthMain {
 		}
 		
 		//Construct frequent pattern by sorting frequent items by count
-		List<Itemset> freqItems = ItemsetUtils.getItem1Sets(rulesConf, hdfsOutputDir);
+		List<Itemset> freqItems = ItemsetUtils.getFreqItems(rulesConf, hdfsOutputDir);
 		Itemset[] frequentPattern = new Itemset[freqItems.size()];
 		freqItems.toArray(frequentPattern);
 		Arrays.sort(frequentPattern);

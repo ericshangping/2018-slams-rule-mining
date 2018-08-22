@@ -1,26 +1,27 @@
+//Static methods that provide utility methods to help the generation of frequent itemsets and association rules
+//DXXSHA001
+//25 July 2018
+
 package FPGrowthRuleMining;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 
+import java.io.IOException;
 
-//Static methods that provide utility of translating Strings into itemsets, etc
-//DXXSHA001
-//25 July 2018
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Scanner;
 
 public class ItemsetUtils {
 	
 	/**
 	 * Reads a string representation of an itemset and returns the itemset object.
 	 * String representation defined in the toString() method of the Itemset class.
-	 * @param String representation of an itemset object
-	 * @return Itemset object
+	 * @param items String representation of an itemset object
+	 * @return Itemset object read in
 	 */
 	public static Itemset readItemset(String items) {
 		Itemset itemset = new Itemset();
@@ -35,13 +36,13 @@ public class ItemsetUtils {
 	}
 	
 	/**
-	 * Returns the list of all itemsets in the output provided in the map reduce output.
-	 * @param conf
-	 * @param outputDir
-	 * @return
+	 * Returns the list of all frequent items from the output directory of the first map reduce job.
+	 * @param conf Hadoop configuration variable being used
+	 * @param outputDir Directory of where the frequent items were written to
+	 * @return List of frequent items as Itemsets with one item
 	 * @throws IOException 
 	 */
-	public static List<Itemset> getItem1Sets(Configuration conf, String outputDir) throws IOException {
+	public static List<Itemset> getFreqItems(Configuration conf, String outputDir) throws IOException {
 		List<Itemset> itemsets = new ArrayList<Itemset>();
 		FileSystem fs = FileSystem.get(conf);
 		String base = outputDir + "/part-r-";
@@ -77,9 +78,10 @@ public class ItemsetUtils {
 	 * This method makes use of the apriori principle: if an itemset if frequent, all its subsets are frequent. 
 	 * Conversely, if an itemset is infrequent, all its supersets will also be infrequent.
 	 * This method only uses this principle by using only frequent itemsets.
-	 * @param List of all the frequent (k-1) itemsets
-	 * @param Prefix of the output directory that previous frequent itemsets were written to, used to find frequent-1-itemsets
-	 * @return 
+	 * @deprecated This method is inefficient.
+	 * @param prevFreqItemsets List of all the frequent (k-1) itemsets
+	 * @param context Prefix of the output directory that previous frequent itemsets were written to, used to find frequent-1-itemsets
+	 * @return List of frequent itemsets.
 	 */
 	@SuppressWarnings("rawtypes")
 	public static List<Itemset> genCandidateKItemsets(List<Itemset> prevFreqItemsets, Context context){
@@ -142,89 +144,11 @@ public class ItemsetUtils {
 		return -1;
 	}
 	
-	public static void printNodeLinkTable(FPTreeNode[] table) {
-		for(FPTreeNode n : table) {
-			FPTreeNode current = n;
-			if(current == null) {
-				System.out.println("null");
-			}
-			else {
-				current.printValue(); System.out.print(" -> ");
-				if(!current.hasNext()) {
-					System.out.print("null\n");
-				}
-				while(current.hasNext()) {
-					current = current.getNext();
-					current.printValue(); System.out.print(" -> ");
-				}
-				System.out.print("null\n");
-			}
-			
-		}
-	}
-	
 	/**
-	 * Finds the longest matching prefix wrt items in itemsets, this is wrong
-	 * https://codereview.stackexchange.com/questions/46965/longest-common-prefix-in-an-array-of-strings
-	 * @param condPattBaseList
-	 * @return
+	 * Reads a line of frequent itemsets found with a base item. 
+	 * @param line String containing all frequent itemsets.
+	 * @return List of frequent itemsets.
 	 */
-	public static int findConditionalFPTreeIndex(List<Itemset> condPattBaseList) {
-		for(int itemIndex=0; itemIndex < condPattBaseList.get(0).size(); itemIndex++) {
-			String item = condPattBaseList.get(0).getItemset().get(itemIndex);
-			//Compare item with each conditional pattern base that isnt the first one
-			for(int pattern=1; pattern<condPattBaseList.size(); pattern++) {
-				if(itemIndex >= condPattBaseList.get(pattern).size() || 
-						!(condPattBaseList.get(pattern).getItemset().get(itemIndex).equals(item))) {
-					//Mismatch
-					return itemIndex;
-				}
-			}
-		}
-		return condPattBaseList.get(0).size();
-	}
-	
-	//wrong
-	public static FPTreeNode constructCondFPTree(List<Itemset> condPattBaseList) {
-		FPTreeNode condFPTree = new FPTreeNode();
-		FPTreeNode current = condFPTree;
-		for(Itemset itemset : condPattBaseList) {
-			current = condFPTree;
-			for(String item : itemset.getItemset()) {
-				FPTreeNode child = current.addChild(item, itemset.getSupport());
-				current = child;
-			}
-		}
-		
-		return condFPTree;
-	}
-	
-	
-	
-	/**
-	 * Adds frequent itemsets to the list given, recursively. works
-	 * @param freqItemsetList - List of frequent itemsets generated. Alg will add to this list. Pass in an empty list.
-	 * @param condFPTree
-	 * @param freqItemset
-	 * @param minSupport
-	 * @param 
-	 */
-	public static void mineFreqItemset(List<Itemset> freqItemsetList, List<FPTreeNode> condFPTree, String freqItemsetString, int index, int count){
-		if(condFPTree.size() == index) {
-			return;
-		}
-		
-		for(int i=index; i<condFPTree.size(); i++) {
-			Itemset freqItemset = readItemset(freqItemsetString);
-			int minCount = Math.min(count, condFPTree.get(i).getCount());
-			freqItemset.addItem(condFPTree.get(i).getItem());
-			freqItemset.setSupport(minCount);
-			freqItemsetList.add(freqItemset);
-			mineFreqItemset(freqItemsetList, condFPTree, freqItemset.toString(), (index+(i+1)), count);
-			
-		}
-	}
-	
 	public static List<Itemset> readFreqItemsets(String line){
 		List<Itemset> itemsets = new ArrayList<Itemset>();
 		String[] itemsetsLine = line.split(";");
@@ -239,6 +163,12 @@ public class ItemsetUtils {
 		return itemsets;
 	}
 	
+	/**
+	 * Finds an itemset in a list of itemsets given the items that it should contain. This is to use the support count.
+	 * @param itemsets List of itemsets to search.
+	 * @param itemset Itemset containing the items specifying the itemset to find.
+	 * @return The itemset if it found it. Null if it wasn't found.
+	 */
 	public static Itemset findItemset(List<Itemset> itemsets, Itemset itemset) {
 		for(Itemset i : itemsets) {
 			if(i.equals(itemset)) {
@@ -248,35 +178,11 @@ public class ItemsetUtils {
 		return null;
 	}
 	
-	//gen rules for i, given the list of freq itemsets in a line
-	public static void genAssocRules(List<AssociationRule> rules, List<Itemset> freqItemsets, List<Itemset> freq1sets, Itemset itemset){
-		int size = itemset.size();
-		
-		Itemset first = new Itemset();
-		first.addItem(itemset.getFirstItem());
-		
-		Itemset second = new Itemset();
-		for(int i=1; i<size; i++) {
-			second.addItem(itemset.getItemset().get(i));
-		}
-		
-		first = findItemset(freq1sets, first);
-		if(second.size()==1) {
-			second = findItemset(freq1sets, second);
-		}
-		else {
-			second = findItemset(freqItemsets, second);
-		}
-		
-		rules.add(new AssociationRule(first, second, itemset.getSupport()));
-		rules.add(new AssociationRule(second, first, itemset.getSupport()));
-	}
-	
 	/**
-	 * Also prunes infrequent items
-	 * @param condPattBase
-	 * @param support
-	 * @return List of items that are frequent. In the form of a list of itemsets where each itemset only contains 1 item.
+	 * Finds the list of items that are frequent in the given conditional pattern base.
+	 * @param condPattBase Conditional pattern base of the itemset.
+	 * @param support Minimum support level.
+	 * @return List of items that are frequent. In the form of a list of itemsets, where each itemset only contains 1 item.
 	 */
 	public static List<Itemset> findFList(List<Itemset> condPattBase, int support){
 		FPTreeNode fList = new FPTreeNode();
@@ -285,6 +191,7 @@ public class ItemsetUtils {
 				fList.addChild(item, itemset.getSupport());
 			}
 		}
+		
 		List<Itemset> freqList = new ArrayList<Itemset>();
 		for(FPTreeNode n : fList.getChildrenNodes()) {
 			if(n.getCount() >= support) {
@@ -297,23 +204,12 @@ public class ItemsetUtils {
 		return freqList;
 	}
 	
-	/*
-	public static boolean isSinglePath(FPTreeNode node) {
-		FPTreeNode current = node;
-		while(current.hasChildren()) {
-			if(current.getChildrenNodes().size() > 1) {
-				return false;
-			}
-			else {
-				current = current.getChildrenNodes().get(0);
-			}
-		}
-		return true;
-	}//*/
-	
 	/**
-	 * Constructs the cond pattern base for items up to a certain point in the freq pattern
-	 * feed in cond patt base and until where it should stop in the freq pattern
+	 * Constructs the cond pattern base for items up to a certain point in the freq pattern.
+	 * @param origCondPattBase The original conditional pattern base.
+	 * @param frequentPattern The frequent pattern.
+	 * @param endItem An item in the frequent pattern where the new conditional pattern base will stop at.
+	 * @return List containing the new conditional pattern base.
 	 */
 	public static List<Itemset> constructCondPattBase(List<Itemset> origCondPattBase, Itemset[] frequentPattern, String endItem) {
 		List<Itemset> condPattBase = new ArrayList<Itemset>();
@@ -323,7 +219,6 @@ public class ItemsetUtils {
 				continue;
 			}
 			Itemset condItemset = new Itemset();
-			
 			for(Itemset patt : frequentPattern) {
 				String item = patt.getFirstItem();
 				if(item.equals(endItem)) {
@@ -333,31 +228,26 @@ public class ItemsetUtils {
 					condItemset.addItem(item);
 				}
 			}
-			
 			if(condItemset.size()!=0) {
 				condItemset.setSupport(i.getSupport());
 				condPattBase.add(condItemset);
 			}
-			
 		}
 		return condPattBase;
 	}
 	
 	/**
-	 * Constructs frequent itemsets using the conditional FP trees of further itemsets
-	 * @param frequentItemsets
-	 * @param freqPatternList
-	 * @param origCondPattBase
-	 * @param base
-	 * @param minSupport
+	 * Constructs frequent itemsets by using an itemset's conditional pattern base 
+	 * and finding the conditional FP trees for those itemsets.
+	 * This is called recursively until all frequent itemsets are found for the item.
+	 * @param frequentItemsets List of frequent itemsets that are found.
+	 * @param freqPatternList The frequent pattern used for the construction of conditional pattern bases.
+	 * @param origCondPattBase Original conditional pattern base of the itemset.
+	 * @param base Base itemset to generate frequent itemsets from.
+	 * @param minSupport Minimum support level.
 	 */
 	public static void constructFreqItemsets(List<Itemset> frequentItemsets, Itemset[] freqPatternList, List<Itemset> origCondPattBase, Itemset base, int minSupport) {
 		List<Itemset> condPattBase = constructCondPattBase(origCondPattBase, freqPatternList, base.getFirstItem());
-		/*TEST
-		System.out.println("cond patt base for end item "+base.getFirstItem());
-		for(Itemset i : condPattBase) {
-			System.out.println(i.toString()+": "+i.getSupport());
-		}//*/
 		if(condPattBase.isEmpty()) {
 			return;
 		}
@@ -370,5 +260,35 @@ public class ItemsetUtils {
 			frequentItemsets.add(freqItemset);
 			constructFreqItemsets(frequentItemsets, freqPatternList, condPattBase, freqItemset, minSupport);
 		}
+	}
+	
+	/**
+	 * Generates combinations of association rules. Uses the pattern of generation of frequent itemsets.
+	 * @param rules List of association rules to add to.
+	 * @param freqItemsets List of frequent itemsets to look up support counts.
+	 * @param freqItems List of frequent items, since they are not included in the freqItemsets list.
+	 * @param itemset Itemset to generate association rules for.
+	 */
+	public static void genAssocRules(List<AssociationRule> rules, List<Itemset> freqItemsets, List<Itemset> freqItems, Itemset itemset){
+		int size = itemset.size();
+		
+		Itemset first = new Itemset();
+		first.addItem(itemset.getFirstItem());
+		
+		Itemset second = new Itemset();
+		for(int i=1; i<size; i++) {
+			second.addItem(itemset.getItemset().get(i));
+		}
+		
+		first = findItemset(freqItems, first);
+		if(second.size()==1) {
+			second = findItemset(freqItems, second);
+		}
+		else {
+			second = findItemset(freqItemsets, second);
+		}
+		
+		rules.add(new AssociationRule(first, second, itemset.getSupport()));
+		rules.add(new AssociationRule(second, first, itemset.getSupport()));
 	}
 }

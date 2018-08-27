@@ -153,7 +153,7 @@ public class ItemsetUtils {
 		List<Itemset> itemsets = new ArrayList<Itemset>();
 		String[] itemsetsLine = line.split(";");
 		for(String s : itemsetsLine) {
-			if(!s.equals("")) {
+			if(!s.equals("\t")) {
 				String[] keyVal = s.split(":");
 				Itemset i = readItemset(keyVal[0]);
 				i.setSupport(Integer.parseInt(keyVal[1]));

@@ -6,6 +6,7 @@ package FPGrowthRuleMining;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import com.google.common.collect.Lists;
 
@@ -104,6 +105,10 @@ public class Itemset implements Comparable<Itemset>{
 		return this.supportCount;
 	}
 	
+	public void incSupport() {
+		this.supportCount++;
+	}
+	
 	public List<String> getItemset(){
 		return this.itemset;
 	}
@@ -127,6 +132,26 @@ public class Itemset implements Comparable<Itemset>{
 	
 	public String getLastItem() {
 		return this.itemset.get(this.itemset.size()-1);
+	}
+	
+	/**
+	 * Removes the last item in the itemset
+	 */
+	public void removeLastItem() {
+		this.itemset.remove(this.itemset.size()-1);
+	}
+	
+	/**
+	 * Only used for comparing results
+	 */
+	public void sortItemset() {
+		String[] sortedList = new String[this.itemset.size()];
+		this.itemset.toArray(sortedList);
+		Arrays.sort(sortedList);
+		this.itemset = new ArrayList<String>();
+		for(String s : sortedList) {
+			this.itemset.add(s);
+		}
 	}
 	
 	/**

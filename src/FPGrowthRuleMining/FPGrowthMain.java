@@ -6,8 +6,8 @@ package FPGrowthRuleMining;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FSDataOutputStream;
+//import org.apache.hadoop.fs.FileSystem;
+//import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.DoubleWritable;
@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Hashtable;
+//import java.util.Hashtable;
 import java.util.Scanner;
 
 public class FPGrowthMain {
@@ -64,16 +64,21 @@ public class FPGrowthMain {
 	 * Order defined by the frequent pattern.
 	 */
 	public static class OrderedItemsetMapper
-	extends Mapper<Object,Text,Text,IntWritable>
+	extends Mapper<Object,Text,Text,Text>
 	{
 		//Variables
-		private Text orderedItemsetText = new Text();
-		private final IntWritable one = new IntWritable(1);
-		private String[] frequentPattern;
+		private Text baseItemText = new Text();
+		private Text pathText = new Text();
+		private Itemset[] frequentPattern;
 		
 		//Set frequent pattern
-		public void setup(Context context) {
-			frequentPattern = context.getConfiguration().get("frequentPattern").split(",");
+		public void setup(Context context) throws IOException {
+			//Read frequent items found and sort by support
+			List<Itemset> freqItems = ItemsetUtils.getFreqItems(context.getConfiguration(), 
+					context.getConfiguration().get("hdfsOutputDir"));
+			frequentPattern = new Itemset[freqItems.size()];
+			freqItems.toArray(frequentPattern);
+			Arrays.sort(frequentPattern);
 		}
 		
 		public void map(Object key, Text line, Context context) 
@@ -93,14 +98,20 @@ public class FPGrowthMain {
 			scLine.close();
 			
 			//Construct the transaction's ordered itemset
-			for(String item : frequentPattern) {
-				if(transaction.contains(item) ) {
-					orderedItemset.addItem(item);
+			for(Itemset set : frequentPattern) {
+				if(transaction.contains(set.getLastItem()) ) {
+					orderedItemset.addItem(set.getLastItem());
 				}
 			}
 			
-			orderedItemsetText.set(orderedItemset.toString());
-			context.write(orderedItemsetText, one);
+			//Write each path with itemset
+			Itemset path = new Itemset();
+			for(String item : orderedItemset.getItemset()) {
+				path.addItem(item);
+				baseItemText.set(item);
+				pathText.set(path.toString());
+				context.write(baseItemText, pathText);
+			}
 		}
 	}
 	
@@ -112,25 +123,20 @@ public class FPGrowthMain {
 	{
 		private Text assocRule = new Text();
 		private DoubleWritable confidence = new DoubleWritable();
-		private List<Itemset> freqItemsets = new ArrayList<Itemset>();
+		private List<Itemset> freqItemsets;// = new ArrayList<Itemset>();
 		
 		//Set up frequent items to look up counts
 		public void setup(Context context) throws IOException {
-			String hdfsOutputDir = context.getConfiguration().get("fs.defaultFS") + 
-					context.getConfiguration().get("outputDir");
-			List<Itemset> freq1Itemsets = ItemsetUtils.getFreqItems(context.getConfiguration(), hdfsOutputDir);
-			for(Itemset i : freq1Itemsets) {
-				freqItemsets.add(i);
-			}
+			String hdfsOutputDir = context.getConfiguration().get("hdfsOutputDir");
+			/*List<Itemset> */freqItemsets = ItemsetUtils.getFreqItems(context.getConfiguration(), hdfsOutputDir);
+//			for(Itemset i : freq1Itemsets) {
+//				freqItemsets.add(i);
+//			}
 		}
 		
 		public void map(Object key, Text line, Context context) 
 		throws IOException, InterruptedException
 		{
-			/*if(line.toString().equals("")||line.toString().equals("\n")) {
-				return;
-			}*/
-			
 			List<Itemset> itemsets = ItemsetUtils.readFreqItemsets(line.toString());
 			List<AssociationRule> rules = new ArrayList<AssociationRule>();
 			for(Itemset i : itemsets) {
@@ -142,6 +148,7 @@ public class FPGrowthMain {
 				confidence.set(r.getConfidence());
 				context.write(assocRule, confidence);
 			}
+			//super.ericisafags
 		}
 	}
 	
@@ -179,6 +186,96 @@ public class FPGrowthMain {
 	}
 	
 	/**
+	 * Reducer that aggregates all paths to a base item and constructs a list of all it's frequent itemsets
+	 * based on the conditional pattern base
+	 */
+	public static class FreqItemsetReducer
+	extends Reducer<Text,Text,Text,Text>{
+		//Variables
+		private Text freqItemsets = new Text();
+		private Text value = new Text();
+		private int support;
+		private Itemset[] frequentPattern;
+		
+		protected void setup(Context context) throws IOException {
+			this.support = context.getConfiguration().getInt("support", 0);
+			List<Itemset> freqItems = ItemsetUtils.getFreqItems(context.getConfiguration(), 
+					context.getConfiguration().get("hdfsOutputDir"));
+			frequentPattern = new Itemset[freqItems.size()];
+			freqItems.toArray(frequentPattern);
+			Arrays.sort(frequentPattern);
+		}
+		
+		public void reduce(Text baseItem, Iterable<Text> paths, Context context) 
+		throws IOException, InterruptedException
+		{
+			//Construct conditional pattern base of the item
+			List<Itemset> condPattBase = new ArrayList<Itemset>();
+			int itemCount = 0;
+			for(Text path : paths) {
+				boolean exists = false;
+				Itemset pathItemset = ItemsetUtils.readItemset(path.toString());
+				pathItemset.removeLastItem();
+				pathItemset.setSupport(1);
+				for(Itemset i : condPattBase) {
+					if(pathItemset.equals(i)) {
+						i.incSupport();
+						exists = true;
+						break;
+					}
+				}
+				if(!exists && pathItemset.size() >= 1) {
+					condPattBase.add(pathItemset);
+				}
+				itemCount++;
+			}
+			
+			/*test prints
+			System.out.println("cond patt base for "+baseItem.toString()+": ");
+			for(Itemset itemset : condPattBase) {
+				System.out.println(itemset.toString()+": "+itemset.getSupport());
+			}//*/
+			
+			if(condPattBase.size() == 0) {
+				return;
+			}
+			
+			//Construct freq itemsets
+			List<Itemset> fList = ItemsetUtils.findFList(condPattBase, support);
+			Itemset[] freqList = new Itemset[fList.size()];
+			fList.toArray(freqList);
+			Arrays.sort(freqList);
+			
+			//System.out.println("freqList: ");
+			
+			
+			List<Itemset> frequentItemsets = new ArrayList<Itemset>();
+			
+			//Use the f-list to find the frequent-2-itemsets
+			for(Itemset itemset : freqList) {
+				Itemset freqItemset = new Itemset();
+				String condFreqItem = itemset.getLastItem();
+				freqItemset.addItem(condFreqItem);
+				freqItemset.addItem(baseItem.toString());
+				freqItemset.setSupport(Math.min(itemCount, itemset.getSupport()));
+				frequentItemsets.add(freqItemset);
+				//Recursive call to find the rest of the itemsets
+				ItemsetUtils.constructFreqItemsets(frequentItemsets, frequentPattern, condPattBase, freqItemset, support);
+			}
+			
+			//Write the itemsets to the output
+			String freqItemsets = "";//+baseItem.toString();
+			for(Itemset freq : frequentItemsets) {
+				freqItemsets += freq.toString()+":"+freq.getSupport()+";";
+			}
+			
+			this.freqItemsets.set(freqItemsets);
+			this.value.set("");
+			context.write(this.freqItemsets, this.value);
+		}
+	}
+	
+	/**
 	 * Reducer for rules that check rules with the minimum confidence specified
 	 */
 	public static class RulesReducer
@@ -203,6 +300,33 @@ public class FPGrowthMain {
 		}
 	}
 	
+	/**
+	 * 
+	 * @param conf
+	 * @param input
+	 * @param output
+	 * @return
+	 * @throws IOException
+	 * @throws ClassNotFoundException
+	 * @throws InterruptedException
+	 */
+	private static boolean runFrequentItemsetGeneration(Configuration conf, String input, String output) 
+	throws IOException, ClassNotFoundException, InterruptedException {
+		Job job = Job.getInstance(conf, "Frequent_Itemsets_Generation");
+		job.setJarByClass(FPGrowthMain.class);
+		job.setMapperClass(OrderedItemsetMapper.class);
+		job.setReducerClass(FreqItemsetReducer.class);
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(Text.class);
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(Text.class);
+		
+		FileInputFormat.addInputPath(job, new Path(input));
+		FileOutputFormat.setOutputPath(job, new Path(output));
+		
+		return job.waitForCompletion(true);
+	}
+	
 	public static void main(String[] args) throws Exception {
 		//Arguements
 		String inputDir = args[0];
@@ -217,9 +341,10 @@ public class FPGrowthMain {
 		Configuration rulesConf = new Configuration();
 		rulesConf.setInt("support", support);
 		rulesConf.set("confidence", confidence);
-		rulesConf.set("outputDir", outputDir);
-		FileSystem fs = FileSystem.get(rulesConf);
 		String hdfsOutputDir = rulesConf.get("fs.defaultFS") + outputDir;
+		rulesConf.set("hdfsOutputDir", hdfsOutputDir);
+		//FileSystem fs = FileSystem.get(rulesConf);
+		
 		
 		//Map-Reduce job to find frequent items
 		Job freq1Sets = Job.getInstance(rulesConf, "FPGrowth_Frequent-1-Itemsets");
@@ -231,12 +356,19 @@ public class FPGrowthMain {
 		FileInputFormat.addInputPath(freq1Sets, new Path(inputDir));
 		FileOutputFormat.setOutputPath(freq1Sets, new Path(outputDir));
 		
-		boolean freq1SetComplete = freq1Sets.waitForCompletion(true);
-		if(!freq1SetComplete) {
+		boolean jobComplete = freq1Sets.waitForCompletion(true);
+		if(!jobComplete) {
 			System.out.println("An error occured while finding the frequent items.");
 			System.exit(1);
 		}
 		
+		jobComplete = runFrequentItemsetGeneration(rulesConf, inputDir, outputDir+"FreqItemsets");
+		if(!jobComplete) {
+			System.out.println("An error occured while finding the frequent itemsets.");
+			System.exit(1);
+		}
+		
+		/* not good for big strings
 		//Construct frequent pattern by sorting frequent items by count
 		List<Itemset> freqItems = ItemsetUtils.getFreqItems(rulesConf, hdfsOutputDir);
 		Itemset[] frequentPattern = new Itemset[freqItems.size()];
@@ -419,6 +551,7 @@ public class FPGrowthMain {
 			System.out.println("An error occured while generating rules.");
 			System.exit(1);
 		}
+		//*/
 		
 		//Print computation time
 		long end = System.currentTimeMillis();

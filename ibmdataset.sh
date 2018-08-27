@@ -2,7 +2,7 @@
 #hadoop programs dont run if the output directory specified already exists so I delete them first
 #hdfs dfs -rm -r /user/dxxsha001/IBMDataset/inputCondFPTrees
 hdfs dfs -rm -r /user/dxxsha001/IBMDataset/output*
-hadoop jar AssociationRules.jar FPGrowthRuleMining.FPGrowthMain /user/dxxsha001/IBMDataset/input /user/dxxsha001/IBMDataset/output 30 0.5
+hadoop jar AssociationRules.jar FPGrowthRuleMining.FPGrowthMain /user/dxxsha001/IBMDataset/input /user/dxxsha001/IBMDataset/output 10 0.5
 #hdfs dfs -cat /user/dxxsha001/IBMDataset/output1/*
 #copies from hdfs to local dir
 #hadoop fs -copyToLocal /user/dxxsha001/IBMDataset/output1/part-r-00000 /local/directory

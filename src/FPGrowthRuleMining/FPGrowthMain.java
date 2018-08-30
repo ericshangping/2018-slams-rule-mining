@@ -34,15 +34,21 @@ public class FPGrowthMain {
 		//Variables
 		private Text frequent1Set = new Text();
 		private final IntWritable one = new IntWritable(1);
+		private int offset;
+		
+		public void setup(Context context) {
+			offset = context.getConfiguration().getInt("offset", 0);
+		}
 		
 		//Map method
 		public void map(Object key, Text line, Context context) 
 		throws IOException, InterruptedException
 		{
 			Scanner scLine = new Scanner(line.toString());
-			//Skip transaction ID and customer ID
-			scLine.next();
-			scLine.next();
+			//Skip data
+			for(int i=0; i<offset; i++) {
+				scLine.next();
+			}
 			
 			//Candidate-1-itemsets
 			while(scLine.hasNext()) {
@@ -68,10 +74,12 @@ public class FPGrowthMain {
 		private Text baseItemText = new Text();
 		private Text pathText = new Text();
 		private Itemset[] frequentPattern;
+		private int offset;
 		
 		//Set frequent pattern
 		public void setup(Context context) throws IOException {
 			//Read frequent items found and sort by support
+			offset = context.getConfiguration().getInt("offset", 0);
 			List<Itemset> freqItems = ItemsetUtils.getFreqItems(context.getConfiguration(), 
 					context.getConfiguration().get("hdfsOutputDir"));
 			frequentPattern = new Itemset[freqItems.size()];
@@ -85,9 +93,10 @@ public class FPGrowthMain {
 			Itemset orderedItemset = new Itemset();
 			Itemset transaction = new Itemset();
 			Scanner scLine = new Scanner(line.toString());
-			//Skip transaction ID and customer ID
-			scLine.next();
-			scLine.next();
+			//Skip data
+			for(int i=0; i<offset; i++) {
+				scLine.next();
+			}
 			
 			//Construct the transaction 
 			while(scLine.hasNext()) {
@@ -370,6 +379,7 @@ public class FPGrowthMain {
 		String outputDir = args[1];
 		int support = Integer.parseInt(args[2]);
 		String confidence = args[3];
+		int offset = Integer.parseInt(args[4]);
 		
 		//Program start
 		long start = System.currentTimeMillis();
@@ -381,7 +391,7 @@ public class FPGrowthMain {
 		rulesConf.set("confidence", confidence);
 		String hdfsOutputDir = rulesConf.get("fs.defaultFS") + outputDir;
 		rulesConf.set("hdfsOutputDir", hdfsOutputDir);
-		
+		rulesConf.setInt("offset", offset);
 		
 		//Map-Reduce job to find frequent items
 		jobComplete = findFrequentItems(rulesConf, inputDir, outputDir);

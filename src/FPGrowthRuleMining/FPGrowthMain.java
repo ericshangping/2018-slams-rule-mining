@@ -144,7 +144,8 @@ public class FPGrowthMain {
 			List<Itemset> itemsets = ItemsetUtils.readFreqItemsets(line.toString());
 			List<AssociationRule> rules = new ArrayList<AssociationRule>();
 			for(Itemset i : itemsets) {
-				ItemsetUtils.genAssocRules(rules, itemsets, freqItemsets, i);
+				Itemset base = new Itemset();
+				ItemsetUtils.genAssocRules(rules, itemsets, freqItemsets, base, i, i.getSupport());
 			}
 			
 			for(AssociationRule r : rules) {

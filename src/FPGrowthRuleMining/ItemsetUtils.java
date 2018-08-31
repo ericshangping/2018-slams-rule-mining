@@ -267,28 +267,53 @@ public class ItemsetUtils {
 	 * @param rules List of association rules to add to.
 	 * @param freqItemsets List of frequent itemsets to look up support counts.
 	 * @param freqItems List of frequent items, since they are not included in the freqItemsets list.
-	 * @param itemset Itemset to generate association rules for.
+	 * @param firstItemset Itemset to generate association rules for.
+	 * @param secondItemset 
+	 * @param support 
 	 */
-	public static void genAssocRules(List<AssociationRule> rules, List<Itemset> freqItemsets, List<Itemset> freqItems, Itemset itemset){
-		int size = itemset.size();
+	public static void genAssocRules(List<AssociationRule> rules, List<Itemset> freqItemsets, List<Itemset> freqItems, Itemset firstItemset, Itemset secondItemset, int support){
+		int size = secondItemset.size();
+		if(size <= 1) {
+			return;
+		}
 		
-		Itemset first = new Itemset();
-		first.addItem(itemset.getFirstItem());
+		Itemset firstItemsetCount;
+		Itemset secondItemsetCount;
+		
+		firstItemset.addItem(secondItemset.getFirstItem());
 		
 		Itemset second = new Itemset();
 		for(int i=1; i<size; i++) {
-			second.addItem(itemset.getItemset().get(i));
+			second.addItem(secondItemset.getItemset().get(i));
 		}
 		
-		first = findItemset(freqItems, first);
-		if(second.size()==1) {
-			second = findItemset(freqItems, second);
+		if(firstItemset.size()==1) {
+			firstItemsetCount = findItemset(freqItems, firstItemset);
 		}
 		else {
-			second = findItemset(freqItemsets, second);
+			firstItemsetCount = findItemset(freqItemsets, firstItemset);
 		}
 		
-		rules.add(new AssociationRule(first, second, itemset.getSupport()));
-		rules.add(new AssociationRule(second, first, itemset.getSupport()));
+		
+		if(second.size()==1) {
+			secondItemsetCount = findItemset(freqItems, second);
+		}
+		else {
+			secondItemsetCount = findItemset(freqItemsets, second);
+		}
+		
+		
+		if(firstItemsetCount == null || secondItemsetCount == null) {
+			return;
+		}
+		
+		firstItemset.setSupport(firstItemsetCount.getSupport());
+		second.setSupport(secondItemsetCount.getSupport());
+		rules.add(new AssociationRule(firstItemset, second, support));
+		rules.add(new AssociationRule(second, firstItemset, support));
+		
+		Itemset newFirst = new Itemset(firstItemset);
+		
+		genAssocRules(rules, freqItemsets, freqItems, newFirst, second, support);
 	}
 }

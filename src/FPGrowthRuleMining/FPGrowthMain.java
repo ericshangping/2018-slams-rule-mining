@@ -28,11 +28,11 @@ public class FPGrowthMain {
 	 * Mapper to find candidate-1-itemsets for the IBM dataset
 	 * Processes each line at a time.
 	 */
-	public static class Items1Mapper
+	public static class ItemsMapper
 	extends Mapper<Object,Text,Text,IntWritable>
 	{
 		//Variables
-		private Text frequent1Set = new Text();
+		private Text frequentItem = new Text();
 		private final IntWritable one = new IntWritable(1);
 		private int offset;
 		
@@ -55,8 +55,8 @@ public class FPGrowthMain {
 				String item = scLine.next();
 				Itemset candidateItemset = new Itemset();
 				candidateItemset.addItem(item);
-				frequent1Set.set(candidateItemset.toString());
-				context.write(frequent1Set, one);
+				frequentItem.set(candidateItemset.toString());
+				context.write(frequentItem, one);
 			}
 			scLine.close();
 		}
@@ -130,12 +130,12 @@ public class FPGrowthMain {
 	{
 		private Text assocRule = new Text();
 		private DoubleWritable confidence = new DoubleWritable();
-		private List<Itemset> freqItemsets;
+		private List<Itemset> freqItems;
 		
 		//Set up frequent items to look up counts
 		public void setup(Context context) throws IOException {
 			String hdfsOutputDir = context.getConfiguration().get("hdfsOutputDir");
-			freqItemsets = ItemsetUtils.getFreqItems(context.getConfiguration(), hdfsOutputDir);
+			freqItems = ItemsetUtils.getFreqItems(context.getConfiguration(), hdfsOutputDir);
 		}
 		
 		public void map(Object key, Text line, Context context) 
@@ -145,7 +145,7 @@ public class FPGrowthMain {
 			List<AssociationRule> rules = new ArrayList<AssociationRule>();
 			for(Itemset i : itemsets) {
 				Itemset base = new Itemset();
-				ItemsetUtils.genAssocRules(rules, itemsets, freqItemsets, base, i, i.getSupport());
+				ItemsetUtils.genAssocRules(rules, itemsets, freqItems, base, i, i.getSupport());
 			}
 			
 			for(AssociationRule r : rules) {
@@ -163,16 +163,16 @@ public class FPGrowthMain {
 	extends Reducer<Text,IntWritable,Text,IntWritable>
 	{
 		//Variables
-		private Text freqItemset = new Text();
-		private int support;
+		private Text freqItem = new Text();
+		private int minSupport;
 		
 		//Setup - set support 
 		protected void setup(Context context) {
-			this.support = context.getConfiguration().getInt("support", 0);
+			this.minSupport = context.getConfiguration().getInt("support", 0);
 		}
 		
 		//Reduce method
-		public void reduce(Text items, Iterable<IntWritable> values, Context context) 
+		public void reduce(Text item, Iterable<IntWritable> values, Context context) 
 		throws IOException, InterruptedException 
 		{
 			int sum = 0;
@@ -180,11 +180,11 @@ public class FPGrowthMain {
 		    		sum += i.get();
 			}
 		    
-		    if(sum >= support) {
+		    if(sum >= minSupport) {
 		    		IntWritable count = new IntWritable(sum);
-		    		Itemset itemset = ItemsetUtils.readItemset(items.toString());
-		    		freqItemset.set(itemset.toString());
-		    		context.write(freqItemset, count);
+		    		Itemset itemset = ItemsetUtils.readItemset(item.toString());
+		    		freqItem.set(itemset.toString());
+		    		context.write(freqItem, count);
 		    }
 		}
 	}
@@ -198,11 +198,11 @@ public class FPGrowthMain {
 		//Variables
 		private Text freqItemsets = new Text();
 		private Text value = new Text();
-		private int support;
+		private int minSupport;
 		private Itemset[] frequentPattern;
 		
 		protected void setup(Context context) throws IOException {
-			this.support = context.getConfiguration().getInt("support", 0);
+			this.minSupport = context.getConfiguration().getInt("support", 0);
 			List<Itemset> freqItems = ItemsetUtils.getFreqItems(context.getConfiguration(), 
 					context.getConfiguration().get("hdfsOutputDir"));
 			frequentPattern = new Itemset[freqItems.size()];
@@ -239,7 +239,7 @@ public class FPGrowthMain {
 			}
 			
 			//Construct freq itemsets
-			List<Itemset> fList = ItemsetUtils.findFList(condPattBase, support);
+			List<Itemset> fList = ItemsetUtils.findFList(condPattBase, minSupport);
 			Itemset[] freqList = new Itemset[fList.size()];
 			fList.toArray(freqList);
 			Arrays.sort(freqList);
@@ -255,7 +255,7 @@ public class FPGrowthMain {
 				freqItemset.setSupport(Math.min(itemCount, itemset.getSupport()));
 				frequentItemsets.add(freqItemset);
 				//Recursive call to find the rest of the itemsets
-				ItemsetUtils.constructFreqItemsets(frequentItemsets, frequentPattern, condPattBase, freqItemset, support);
+				ItemsetUtils.constructFreqItemsets(frequentItemsets, frequentPattern, condPattBase, freqItemset, minSupport);
 			}
 			
 			//Write the itemsets to the output
@@ -283,10 +283,10 @@ public class FPGrowthMain {
 			minConfidence = Double.parseDouble(confString);
 		}
 		
-		public void reduce(Text rule, Iterable<DoubleWritable> values, Context context) 
+		public void reduce(Text rule, Iterable<DoubleWritable> vals, Context context) 
 		throws IOException, InterruptedException
 		{
-			for(DoubleWritable c : values) {
+			for(DoubleWritable c : vals) {
 				if(c.get() >= minConfidence) {
 					context.write(rule, c);
 				}
@@ -309,7 +309,7 @@ public class FPGrowthMain {
 	{
 		Job job = Job.getInstance(conf, "Find_Frequent_Items");
 		job.setJarByClass(FPGrowthMain.class);
-		job.setMapperClass(Items1Mapper.class);
+		job.setMapperClass(ItemsMapper.class);
 		job.setReducerClass(ItemsReducer.class);
 		job.setOutputKeyClass(Text.class);
 		job.setOutputValueClass(IntWritable.class);

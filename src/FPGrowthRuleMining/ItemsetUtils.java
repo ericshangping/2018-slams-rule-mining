@@ -133,6 +133,7 @@ public class ItemsetUtils {
 	 * @param All items in the frequent pattern seperated by ','.
 	 * @param The specified item that you wish to find the index of.
 	 * @return The index of the specified item in the frequent pattern.
+	 * @deprecated
 	 */
 	public static int findFreqPatternIndex(String freqPattern, String item) {
 		String[] freqPatternList = freqPattern.split(",");
